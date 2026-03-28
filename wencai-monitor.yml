@@ -1,0 +1,54 @@
+name: 问财股票监控 (全自动)
+
+on:
+  schedule:
+    - cron: '*/1 * * * *'  # 每 1 分钟运行一次 (UTC时间)
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 安装系统依赖 (Chrome)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-chromedriver
+          sudo apt-get install -y xvfb  # 虚拟显示器
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install -r requirements.txt
+          pip install selenium webdriver-manager pandas requests lxml beautifulsoup4
+
+      - name: 运行监控脚本
+        run: |
+          python scripts/wencai_cloud.py
+        env:
+          # 可选：Telegram 通知配置
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: 上传数据文件
+        uses: actions/upload-artifact@v3
+        with:
+          name: wencai-data-$(date +%Y%m%d-%H%M%S)
+          path: wencai_data.csv
+          retention-days: 7  # 保留 7 天
+
+      - name: 保存数据到仓库 (可选)
+        if: always()
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add wencai_data.csv
+          git commit -m "Update data: $(date)" || echo "No changes"
+          git push
